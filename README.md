@@ -85,3 +85,5 @@ MIT License
 ## Contributions
 Feel free to open issues or submit pull requests!
 
+Author: [Geir Freysson](https://geirfreysson.com)
+
