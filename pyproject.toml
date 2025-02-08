@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "click>=8.1.8",
+    "ollama>=0.4.7",
     "openai>=1.61.1",
     "python-dotenv>=1.0.1",
     "requests>=2.32.3",

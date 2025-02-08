@@ -2,9 +2,16 @@ import requests
 import openai
 import click
 import os
+import base64
 from dotenv import load_dotenv
 
 load_dotenv()
+
+try:
+    import ollama
+    OLLAMA_AVAILABLE = True
+except ImportError:
+    OLLAMA_AVAILABLE = False
 
 # Set your API keys via environment variables for security
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
@@ -30,13 +37,13 @@ def fetch_file_content(repo_owner, repo_name, file_path, branch):
     response.raise_for_status()
     file_data = response.json()
     if 'content' in file_data:
-        import base64
         return base64.b64decode(file_data['content']).decode('utf-8')
     return ""
 
-def review_code_with_openai(diff, filename, full_code):
-    """Send the full file content along with the changed code (diff) to OpenAI for review."""
-    client = openai.OpenAI(api_key=OPENAI_API_KEY)
+def review_code(diff, filename, full_code, model):
+    """Generate a code review using OpenAI or Ollama based on the chosen model."""
+    provider, model_name = model.split(":", 1)
+    
     prompt = f"""
     You are a code reviewer. Review the following Git diff from {filename} for potential bugs.
     Use the full file content as context, but focus only on the changes.
@@ -56,21 +63,37 @@ def review_code_with_openai(diff, filename, full_code):
     
     Provide constructive feedback with clear recommendations.
     """
-
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}]
-    )
-
-    return response.choices[0].message.content
+    
+    if provider == "openai":
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response.choices[0].message.content
+    
+    elif provider == "ollama":
+        if not OLLAMA_AVAILABLE:
+            raise RuntimeError("Ollama module is not installed. Install it using 'pip install ollama'.")
+        response = ollama.chat(model=model_name, messages=[{"role": "user", "content": prompt}])
+        return response["message"]["content"]
+    
+    else:
+        raise ValueError("Invalid model provider. Use 'openai' or 'ollama'.")
 
 @click.command()
 @click.argument("repo")
 @click.argument("pr_number", type=int)
-def cli(repo, pr_number):
-    """Fetch and review a GitHub PR using OpenAI with full file context"""
-    if not GITHUB_TOKEN or not OPENAI_API_KEY:
-        click.echo("Error: Please set GITHUB_TOKEN and OPENAI_API_KEY as environment variables.")
+@click.option("--model", required=False, default="openai:gpt-4o-mini")
+def cli(repo, pr_number, model):
+    """Fetch and review a GitHub PR using OpenAI or Ollama with full file context."""
+    if not GITHUB_TOKEN:
+        click.echo("Error: Please set GITHUB_TOKEN as an environment variable.")
+        return
+    
+    provider, _ = model.split(":", 1)
+    if provider == "openai" and not OPENAI_API_KEY:
+        click.echo("Error: Please set OPENAI_API_KEY as an environment variable.")
         return
     
     repo_owner, repo_name = repo.split("/")
@@ -99,8 +122,8 @@ def cli(repo, pr_number):
         
         click.echo(f"\nReviewing changes in: {filename}")
         
-        # Review diff with OpenAI using full file context
-        review = review_code_with_openai(diff, filename, full_code)
+        # Review diff with selected model
+        review = review_code(diff, filename, full_code, model)
         click.echo(f"\nReview for {filename}:{review}\n{'-'*40}")
 
 if __name__ == "__main__":
