@@ -41,6 +41,7 @@ def review_code_with_openai(diff, filename, full_code):
     You are a code reviewer. Review the following Git diff from {filename} for potential bugs.
     Use the full file content as context, but focus only on the changes.
     Suggest improvements where necessary. Keep it concise, don't highlight positives, just negatives.
+    If there are more than 3 suggestions for a file, pick the top suggestion only, unless there is a critical one.
     Show before and after code snippets where possible. Be encouraging.
     
     Full file content:
