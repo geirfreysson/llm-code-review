@@ -1,11 +1,20 @@
 # LLM Code Review
 
 ## Overview
-`llm-code-review` is a Python CLI tool that fetches and reviews GitHub pull requests using OpenAI's language model. It downloads modified files from a specified PR, retrieves their full content, and leverages OpenAI to provide focused, constructive code reviews.
+
+`llm-code-review` is a command-line tool for automated code reviews of GitHub pull requests using OpenAI's GPT models or local models via Ollama. It fetches modified files, extracts diffs, retrieves full file contents for context, and generates concise, constructive code reviews.
+
+## Features
+- Supports OpenAI API (`gpt-4o-mini`, etc.)
+- Supports local models via Ollama
+- Fetches diffs from GitHub pull requests
+- Retrieves full file contents for context
+- Provides AI-generated feedback with before/after code snippets
+- Filters reviews to focus only on Python files
 
 ## Installation
-You can install `llm-code-review` from PyPI using pip:
 
+Install the package from PyPI:
 ```sh
 pip install llm-code-review
 ```
@@ -33,15 +42,29 @@ source ~/.bashrc  # or source ~/.zshrc
 Alternatively, you can store them in a `.env` file and use `python-dotenv` to load them.
 
 ## Usage
-Once installed and set up, you can run the tool using the following command:
 
+### Basic Command
+
+To review a GitHub pull request:
 ```sh
-llm-code-review <repo_owner/repo_name> <pr_number>
+llm-code-review owner/repository PR_NUMBER
 ```
 
-### Example:
+Example:
 ```sh
-llm-code-review octocat/Hello-World 42
+llm-code-review octocat/hello-world 42
+```
+
+### Using a Specific Model
+
+#### OpenAI
+```sh
+llm-code-review octocat/hello-world 42 --model openai:gpt-4o-mini
+```
+
+#### Ollama (local model)
+```sh
+llm-code-review octocat/Hello-World 42 --model ollama:deepseek-r1:8b
 ```
 This command fetches the pull request #42 from the `octocat/Hello-World` repository, retrieves modified Python files, and reviews the changes using OpenAI.
 
@@ -60,8 +83,5 @@ This command fetches the pull request #42 from the `octocat/Hello-World` reposit
 MIT License
 
 ## Contributions
-Feel free to contribute by submitting issues or pull requests!
-
-## Author
-[Your Name]
+Feel free to open issues or submit pull requests!
 
