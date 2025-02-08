@@ -28,7 +28,7 @@ def review_code_with_openai(diff, filename):
     client = openai.OpenAI(api_key=OPENAI_API_KEY)
     prompt = f"""
     You are a code reviewer. Review the following Git diff from {filename} for best practices, efficiency, readability, and potential bugs.
-    Focus only on the changes and suggest improvements where necessary. Only mention the most important parts that might cause problems or bugs.
+    Focus only on the changes and suggest improvements where necessary.
 
     ```diff
     {diff}
@@ -58,6 +58,9 @@ def review_pr(repo, pr_number):
     files = fetch_pr_files(repo_owner, repo_name, pr_number)
     for file in files:
         filename = file['filename']
+        if not filename.endswith(".py"):
+            continue
+        
         diff = file.get('patch', '')  # GitHub API provides 'patch' containing the diff
         
         if not diff:
