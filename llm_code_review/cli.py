@@ -29,7 +29,8 @@ def review_code_with_openai(diff, filename):
     prompt = f"""
     You are a code reviewer. Review the following Git diff from {filename} for potential bugs.
     Focus only on the changes and suggest improvements where necessary. Keep it very short, don't highlight positives, just negatives, and show before and after code snippets. Be encouraging.
-
+    In the diff, lines that start with "-" have been taken away and lines with "+" have been added. There is no need to code review lines that start with "-".
+    If necessary, suggest a fix to the line being reviewed.
 
     ```diff
     {diff}
