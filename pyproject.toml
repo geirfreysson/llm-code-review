@@ -1,7 +1,7 @@
 [project]
 name = "llm-code-review"
 version = "0.1.0"
-description = "Add your description here"
+description = "Command line tool to code review GitHub pull requests with LLMs."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
