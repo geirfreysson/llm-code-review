@@ -23,15 +23,32 @@ def fetch_pr_files(repo_owner, repo_name, pr_number):
     response.raise_for_status()
     return response.json()
 
-def review_code_with_openai(diff, filename):
-    """Send only the changed code (diff) to OpenAI for a focused review."""
+def fetch_file_content(repo_owner, repo_name, file_path, branch):
+    """Fetch the full content of a file from the repository."""
+    url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/contents/{file_path}?ref={branch}"
+    response = requests.get(url, headers=HEADERS)
+    response.raise_for_status()
+    file_data = response.json()
+    if 'content' in file_data:
+        import base64
+        return base64.b64decode(file_data['content']).decode('utf-8')
+    return ""
+
+def review_code_with_openai(diff, filename, full_code):
+    """Send the full file content along with the changed code (diff) to OpenAI for review."""
     client = openai.OpenAI(api_key=OPENAI_API_KEY)
     prompt = f"""
     You are a code reviewer. Review the following Git diff from {filename} for potential bugs.
-    Focus only on the changes and suggest improvements where necessary. Keep it very short, don't highlight positives, just negatives, and show before and after code snippets. Be encouraging.
-    In the diff, lines that start with "-" have been taken away and lines with "+" have been added. There is no need to code review lines that start with "-".
-    If necessary, suggest a fix to the line being reviewed.
-
+    Use the full file content as context, but focus only on the changes.
+    Suggest improvements where necessary. Keep it concise, don't highlight positives, just negatives.
+    Show before and after code snippets where possible. Be encouraging.
+    
+    Full file content:
+    ```python
+    {full_code}
+    ```
+    
+    Changes:
     ```diff
     {diff}
     ```
@@ -50,12 +67,19 @@ def review_code_with_openai(diff, filename):
 @click.argument("repo")
 @click.argument("pr_number", type=int)
 def cli(repo, pr_number):
-    """Fetch and review a GitHub PR using OpenAI"""
+    """Fetch and review a GitHub PR using OpenAI with full file context"""
     if not GITHUB_TOKEN or not OPENAI_API_KEY:
         click.echo("Error: Please set GITHUB_TOKEN and OPENAI_API_KEY as environment variables.")
         return
     
     repo_owner, repo_name = repo.split("/")
+    
+    # Fetch PR details to get the branch name
+    pr_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pr_number}"
+    pr_response = requests.get(pr_url, headers=HEADERS)
+    pr_response.raise_for_status()
+    pr_data = pr_response.json()
+    branch = pr_data['head']['ref']
     
     files = fetch_pr_files(repo_owner, repo_name, pr_number)
     for file in files:
@@ -69,8 +93,14 @@ def cli(repo, pr_number):
             click.echo(f"No changes detected in {filename}")
             continue
         
+        # Fetch full file content
+        full_code = fetch_file_content(repo_owner, repo_name, filename, branch)
+        
         click.echo(f"\nReviewing changes in: {filename}")
         
-        # Review diff with OpenAI
-        review = review_code_with_openai(diff, filename)
+        # Review diff with OpenAI using full file context
+        review = review_code_with_openai(diff, filename, full_code)
         click.echo(f"\nReview for {filename}:{review}\n{'-'*40}")
+
+if __name__ == "__main__":
+    cli()
