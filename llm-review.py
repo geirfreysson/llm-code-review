@@ -27,8 +27,9 @@ def review_code_with_openai(diff, filename):
     """Send only the changed code (diff) to OpenAI for a focused review."""
     client = openai.OpenAI(api_key=OPENAI_API_KEY)
     prompt = f"""
-    You are a code reviewer. Review the following Git diff from {filename} for best practices, efficiency, readability, and potential bugs.
-    Focus only on the changes and suggest improvements where necessary.
+    You are a code reviewer. Review the following Git diff from {filename} for potential bugs.
+    Focus only on the changes and suggest improvements where necessary. Keep it very short, don't highlight positives, just negatives, and show before and after code snippets. Be encouraging.
+
 
     ```diff
     {diff}
