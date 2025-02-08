@@ -48,7 +48,7 @@ def review_code_with_openai(diff, filename):
 @click.command()
 @click.argument("repo")
 @click.argument("pr_number", type=int)
-def review_pr(repo, pr_number):
+def cli(repo, pr_number):
     """Fetch and review a GitHub PR using OpenAI"""
     if not GITHUB_TOKEN or not OPENAI_API_KEY:
         click.echo("Error: Please set GITHUB_TOKEN and OPENAI_API_KEY as environment variables.")
@@ -73,6 +73,3 @@ def review_pr(repo, pr_number):
         # Review diff with OpenAI
         review = review_code_with_openai(diff, filename)
         click.echo(f"\nReview for {filename}:{review}\n{'-'*40}")
-
-if __name__ == "__main__":
-    review_pr()

@@ -10,3 +10,13 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "requests>=2.32.3",
 ]
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+[project.urls]
+Homepage = "https://github.com/geirfreysson/llm-code-review"
+Changelog = "https://github.com/geirfreysson/llm-code-review/releases"
+Issues = "https://github.com/geirfreysson/llm-code-review/issues"
+CI = "https://github.com/geirfreysson/llm-code-review/actions"
+[project.scripts]
+llm-code-review = "llm_code_review.cli:cli"
