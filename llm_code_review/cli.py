@@ -13,28 +13,43 @@ try:
 except ImportError:
     OLLAMA_AVAILABLE = False
 
-# Set your API keys via environment variables for security
+# Set API keys via environment variables for security
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# GitHub API Headers
-HEADERS = {
-    "Authorization": f"token {GITHUB_TOKEN}",
-    "Accept": "application/vnd.github.v3+json"
-}
+# GitHub API Headers (only if authentication is needed)
+AUTH_HEADERS = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"} if GITHUB_TOKEN else {}
 
-def fetch_pr_files(repo_owner, repo_name, pr_number):
-    """Fetch the modified files and their diffs in the pull request"""
+def is_repo_public(repo_owner, repo_name):
+    """Check if a repository is public."""
+    url = f"https://api.github.com/repos/{repo_owner}/{repo_name}"
+    response = requests.get(url)  # Unauthenticated request
+    if response.status_code == 200:
+        return True  # Public repo
+    elif response.status_code == 404:
+        click.echo(f"Error: Repository {repo_owner}/{repo_name} not found.")
+    else:
+        click.echo(f"Error: Unable to determine repository visibility (Status: {response.status_code}, Response: {response.text}).")
+    return False
+
+def fetch_pr_files(repo_owner, repo_name, pr_number, public_repo):
+    """Fetch the modified files and their diffs in the pull request."""
     url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pr_number}/files"
-    response = requests.get(url, headers=HEADERS)
-    response.raise_for_status()
+    headers = {} if public_repo else AUTH_HEADERS
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        click.echo(f"Error fetching PR files (Status: {response.status_code}, Response: {response.text}).")
+        return []
     return response.json()
 
-def fetch_file_content(repo_owner, repo_name, file_path, branch):
+def fetch_file_content(repo_owner, repo_name, file_path, branch, public_repo):
     """Fetch the full content of a file from the repository."""
     url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/contents/{file_path}?ref={branch}"
-    response = requests.get(url, headers=HEADERS)
-    response.raise_for_status()
+    headers = {} if public_repo else AUTH_HEADERS
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        click.echo(f"Error fetching file {file_path} (Status: {response.status_code}, Response: {response.text}).")
+        return ""
     file_data = response.json()
     if 'content' in file_data:
         return base64.b64decode(file_data['content']).decode('utf-8')
@@ -64,22 +79,26 @@ def review_code(diff, filename, full_code, model):
     Provide constructive feedback with clear recommendations.
     """
     
-    if provider == "openai":
-        client = openai.OpenAI(api_key=OPENAI_API_KEY)
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return response.choices[0].message.content
-    
-    elif provider == "ollama":
-        if not OLLAMA_AVAILABLE:
-            raise RuntimeError("Ollama module is not installed. Install it using 'pip install ollama'.")
-        response = ollama.chat(model=model_name, messages=[{"role": "user", "content": prompt}])
-        return response["message"]["content"]
-    
-    else:
-        raise ValueError("Invalid model provider. Use 'openai' or 'ollama'.")
+    try:
+        if provider == "openai":
+            client = openai.OpenAI(api_key=OPENAI_API_KEY)
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return response.choices[0].message.content
+        
+        elif provider == "ollama":
+            if not OLLAMA_AVAILABLE:
+                raise RuntimeError("Ollama module is not installed. Install it using 'pip install ollama'.")
+            response = ollama.chat(model=model_name, messages=[{"role": "user", "content": prompt}])
+            return response["message"]["content"]
+        
+        else:
+            raise ValueError("Invalid model provider. Use 'openai' or 'ollama'.")
+    except Exception as e:
+        click.echo(f"Error during code review: {e}")
+        return ""
 
 @click.command()
 @click.argument("repo")
@@ -87,8 +106,11 @@ def review_code(diff, filename, full_code, model):
 @click.option("--model", required=False, default="openai:gpt-4o-mini")
 def cli(repo, pr_number, model):
     """Fetch and review a GitHub PR using OpenAI or Ollama with full file context."""
-    if not GITHUB_TOKEN:
-        click.echo("Error: Please set GITHUB_TOKEN as an environment variable.")
+    repo_owner, repo_name = repo.split("/")
+    public_repo = is_repo_public(repo_owner, repo_name)
+    
+    if not public_repo and not GITHUB_TOKEN:
+        click.echo("Error: Private repository detected. Please set GITHUB_TOKEN as an environment variable.")
         return
     
     provider, _ = model.split(":", 1)
@@ -96,33 +118,33 @@ def cli(repo, pr_number, model):
         click.echo("Error: Please set OPENAI_API_KEY as an environment variable.")
         return
     
-    repo_owner, repo_name = repo.split("/")
-    
     # Fetch PR details to get the branch name
     pr_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pr_number}"
-    pr_response = requests.get(pr_url, headers=HEADERS)
-    pr_response.raise_for_status()
+    headers = {} if public_repo else AUTH_HEADERS
+    pr_response = requests.get(pr_url, headers=headers)
+    if pr_response.status_code != 200:
+        click.echo(f"Error fetching PR details (Status: {pr_response.status_code}, Response: {pr_response.text}).")
+        return
     pr_data = pr_response.json()
     branch = pr_data['head']['ref']
     
-    files = fetch_pr_files(repo_owner, repo_name, pr_number)
+    files = fetch_pr_files(repo_owner, repo_name, pr_number, public_repo)
+    if not files:
+        click.echo("No files retrieved from the PR. Check repository and PR number.")
+        return
     for file in files:
         filename = file['filename']
         if not filename.endswith(".py"):
             continue
         
-        diff = file.get('patch', '')  # GitHub API provides 'patch' containing the diff
+        diff = file.get('patch', '')
         
         if not diff:
             click.echo(f"No changes detected in {filename}")
             continue
         
-        # Fetch full file content
-        full_code = fetch_file_content(repo_owner, repo_name, filename, branch)
-        
+        full_code = fetch_file_content(repo_owner, repo_name, filename, branch, public_repo)
         click.echo(f"\nReviewing changes in: {filename}")
-        
-        # Review diff with selected model
         review = review_code(diff, filename, full_code, model)
         click.echo(f"\nReview for {filename}:{review}\n{'-'*40}")
 
